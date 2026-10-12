@@ -55,8 +55,9 @@ test("home renders lanes from cache, scrolls, and plays a video in a modal", asy
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
 
-  // No CSP violations or script errors from our own page.
-  expect(problems.filter((p) => !/youtube|googlevideo|doubleclick|ytimg|google\.com/i.test(p))).toEqual([]);
+  // No CSP violations or script errors from our own page. The YouTube embed probes
+  // browser features (e.g. compute-pressure) the page doesn't grant; those notices are its own.
+  expect(problems.filter((p) => !/youtube|googlevideo|doubleclick|ytimg|google\.com|^Permissions policy violation/i.test(p))).toEqual([]);
 });
 
 test("settings shows quota and the disconnect control", async ({ page }) => {
