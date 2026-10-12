@@ -35,6 +35,12 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      - name: Surface npm errors as annotations
+        if: failure()
+        shell: bash
+        run: |
+          log=$(ls -t "$(npm config get cache)"/_logs/*-debug-0.log 2>/dev/null | head -1)
+          [ -n "$log" ] && grep -E " (error|verbose stack|verbose cwd)" "$log" | head -25 | sed 's/%/%25/g' | while IFS= read -r line; do echo "::error title=npm ci::$line"; done
       - run: npx playwright install --with-deps chromium webkit
       - name: Throwaway secrets for the demo database (never real credentials)
         shell: bash
