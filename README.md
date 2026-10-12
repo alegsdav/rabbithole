@@ -6,7 +6,7 @@ Lanes are built server-side from the official **YouTube Data API v3**: your subs
 
 ## Setup
 
-1. **Install:** `npm install`
+1. **Install:** `npm install` (Node 24.11, see `.nvmrc`). On Windows, if the install fails building `better-sqlite3` with "could not find any Visual Studio installation", use `npm ci --ignore-scripts`: the package ships a prebuilt Windows binary and nothing else needs install scripts.
 2. **Google OAuth client** (one time, in [Google Cloud Console](https://console.cloud.google.com/)):
    - Create a project. Enable **YouTube Data API v3** (APIs & Services → Library).
    - **OAuth consent screen:** User type *External*, publishing status **Testing**. Add your own Google account under **Test users**. Add the scope `.../auth/youtube.readonly`.

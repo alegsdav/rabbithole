@@ -13,7 +13,9 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
-      - run: npm ci
+      # better-sqlite3 loads its bundled prebuilt binary; without --ignore-scripts npm runs node-gyp,
+      # which cannot find the Visual Studio 2026 install on windows-latest. No other package needs its script.
+      - run: npm ci --ignore-scripts
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
@@ -34,13 +36,9 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
-      - run: npm ci
-      - name: Surface npm errors as annotations
-        if: failure()
-        shell: bash
-        run: |
-          log=$(ls -t "$(npm config get cache)"/_logs/*-debug-0.log 2>/dev/null | head -1)
-          [ -n "$log" ] && grep -E " (error|verbose stack|verbose cwd)" "$log" | head -25 | sed 's/%/%25/g' | while IFS= read -r line; do echo "::error title=npm ci::$line"; done
+      # better-sqlite3 loads its bundled prebuilt binary; without --ignore-scripts npm runs node-gyp,
+      # which cannot find the Visual Studio 2026 install on windows-latest. No other package needs its script.
+      - run: npm ci --ignore-scripts
       - run: npx playwright install --with-deps chromium webkit
       - name: Throwaway secrets for the demo database (never real credentials)
         shell: bash
