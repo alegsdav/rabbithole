@@ -1,0 +1,108 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff;
+  --fg: #0f0f0f;
+  --muted: #606060;
+  --subtle: #f2f2f2;
+  --surface: #ffffff;
+  --border: #e5e5e5;
+  --focus: #0b57d0;
+  --danger: #c5221f;
+  --on-danger: #ffffff;
+  --card-w: 300px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f0f0f;
+    --fg: #f1f1f1;
+    --muted: #aaaaaa;
+    --subtle: #272727;
+    --surface: #1a1a1a;
+    --border: #303030;
+    --focus: #8ab4f8;
+    --danger: #f28b82;
+    --on-danger: #0f0f0f;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-subtle: var(--subtle);
+  --color-surface: var(--surface);
+  --color-border: var(--border);
+  --color-danger: var(--danger);
+  --color-on-danger: var(--on-danger);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI Variable", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Two rows of cards that scroll sideways together as one grid. */
+.lane-grid {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(2, auto);
+  grid-auto-columns: var(--card-w);
+  gap: 24px 16px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: 16px;
+  padding: 4px 16px 12px;
+  scrollbar-width: thin;
+}
+.lane-grid > * {
+  scroll-snap-align: start;
+}
+
+@media (max-width: 640px) {
+  :root {
+    --card-w: 72vw;
+  }
+}
+
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+@keyframes pulse-soft {
+  50% {
+    opacity: 0.45;
+  }
+}
+.skeleton {
+  background: var(--subtle);
+  animation: pulse-soft 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+  .lane-grid {
+    scroll-behavior: auto;
+  }
+}
+
+dialog::backdrop {
+  background: rgb(0 0 0 / 0.7);
+}

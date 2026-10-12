@@ -1,0 +1,32 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "rabbithole-demo",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "DATABASE_PATH=./data/demo.db npx next dev -p 3100"
+      ],
+      "port": 3100
+    },
+    {
+      "name": "rabbithole-demo-prod",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "npx next build && DATABASE_PATH=./data/demo.db npx next start -p 3101"
+      ],
+      "port": 3101
+    },
+    {
+      "name": "rabbithole",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
+      "port": 3000
+    }
+  ]
+}

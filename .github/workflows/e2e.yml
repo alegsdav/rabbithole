@@ -1,0 +1,51 @@
+name: Cross-browser smoke tests
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+
+  e2e:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            projects: --project=chromium --project=webkit --project=firefox --project=mobile-safari
+          - os: windows-latest
+            projects: --project=chromium --project=firefox --project=edge
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium webkit firefox
+      - name: Throwaway secrets for the demo database (never real credentials)
+        shell: bash
+        run: |
+          {
+            echo "AUTH_SECRET=$(openssl rand -base64 33)"
+            echo "TOKEN_ENC_KEY=$(openssl rand -base64 32)"
+            echo "AUTH_GOOGLE_ID=ci-placeholder"
+            echo "AUTH_GOOGLE_SECRET=ci-placeholder"
+          } > .env.local
+      - name: Seed demo database
+        shell: bash
+        run: mkdir -p data && DATABASE_PATH=./data/demo.db npx tsx --conditions=react-server --env-file=.env.local scripts/dev-seed.ts > data/demo-session.txt
+      - run: npx playwright test ${{ matrix.projects }}
