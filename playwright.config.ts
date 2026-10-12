@@ -12,7 +12,9 @@ export default defineConfig({
   reporter: [["list"]],
   use: { baseURL: "http://localhost:3101" },
   webServer: {
-    command: "npx next build && DATABASE_PATH=./data/demo.db npx next start -p 3101",
+    // env instead of a VAR=value prefix, which Windows cmd can't run.
+    command: "npx next build && npx next start -p 3101",
+    env: { DATABASE_PATH: "./data/demo.db" },
     url: "http://localhost:3101",
     reuseExistingServer: true,
     timeout: 240_000,
