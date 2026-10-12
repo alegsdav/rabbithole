@@ -1,8 +1,8 @@
 # Rabbithole
 
-YouTube as one categorized home screen. Each interest is a **lane**: two rows of video cards that scroll sideways together, ranked on its own so one binge can't bury your other interests. Searches are filed into the right lane by Claude, and new lanes are only created when you confirm.
+YouTube as one categorized home screen. Each interest is a **lane**: two rows of video cards that scroll sideways together, ranked on its own so one binge can't bury your other interests. Searches are filed into the right lane by Gemini, and new lanes are only created when you confirm.
 
-Lanes are built server-side from the official **YouTube Data API v3**: your subscriptions (sorted into lanes by Claude, correctable by you), a few searches per lane, and local signals (clicks, watch time, likes). YouTube is never scraped, and nothing is ever posted to it.
+Lanes are built server-side from the official **YouTube Data API v3**: your subscriptions (sorted into lanes by Gemini, correctable by you), a few searches per lane, and local signals (clicks, watch time, likes). YouTube is never scraped, and nothing is ever posted to it.
 
 ## Setup
 
@@ -16,7 +16,7 @@ Lanes are built server-side from the official **YouTube Data API v3**: your subs
    - `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` from step 2
    - `AUTH_SECRET`: `openssl rand -base64 33`
    - `TOKEN_ENC_KEY`: `openssl rand -base64 32`
-   - `ANTHROPIC_API_KEY` from the [Claude Console](https://platform.claude.com/)
+   - `GEMINI_API_KEY` from [Google AI Studio](https://aistudio.google.com/apikey), and `GEMINI_MODEL` (any Gemini model id, e.g. `gemini-2.5-flash`; change it any time without code changes)
 4. **Run:** `npm run dev`, open http://localhost:3000, and sign in with Google. Choose **Set up lanes from my subscriptions**.
 
 ## Validation ("do first" checks)
@@ -24,7 +24,7 @@ Lanes are built server-side from the official **YouTube Data API v3**: your subs
 | Check | How |
 | --- | --- |
 | OAuth with `youtube.readonly`, real channel-to-lane classification, quota per lane refresh | Sign in once in the app, then `npm run check:youtube` |
-| Routing on 20 sample queries | `npm run eval:routing` (needs `ANTHROPIC_API_KEY`) |
+| Routing on 20 sample queries | `npm run eval:routing` (needs `GEMINI_API_KEY` and `GEMINI_MODEL`) |
 | Unit tests: quota ceiling, refresh cost, ranking, router rules, token sealing, disconnect, CSRF, CSP | `npm test` |
 | IFrame playback | Click any card; the modal uses the YouTube IFrame Player API |
 
@@ -44,7 +44,7 @@ Lanes are built server-side from the official **YouTube Data API v3**: your subs
   - `search_cache`: the cache, in the database.
   - `http.ts`: validation, CSRF, rate limits.
 - **Every API route** validates its input with zod, checks the session, requires a same-origin `Origin` plus the `x-rabbithole` header (CSRF), and is rate-limited per user.
-- **Search routing:** Claude (`claude-opus-5-5` at low effort, structured JSON validated with zod) receives only the query and the lane ids, names and descriptions, plus your past corrections. It never receives tokens, history or account details. At confidence ≥ 0.7 the search is routed straight to a lane with a chip you can change. Below that, you pick from the top two lanes or "New lane". A proposed new lane is created only when you confirm it.
+- **Search routing:** Gemini (model from `GEMINI_MODEL`, JSON constrained by a schema and validated with zod) receives only the query and the lane ids, names and descriptions, plus your past corrections. It never receives tokens, history or account details. At confidence ≥ 0.7 the search is routed straight to a lane with a chip you can change. Below that, you pick from the top two lanes or "New lane". A proposed new lane is created only when you confirm it.
 
 ## Notes
 

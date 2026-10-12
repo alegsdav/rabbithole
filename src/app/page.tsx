@@ -63,7 +63,7 @@ function SetupNeeded() {
       <h1 className="text-2xl font-bold">Rabbithole needs configuration</h1>
       <p className="mt-3 text-muted">
         Copy <code>.env.example</code> to <code>.env.local</code> and fill in the Google OAuth client, <code>AUTH_SECRET</code>, <code>TOKEN_ENC_KEY</code> and{" "}
-        <code>ANTHROPIC_API_KEY</code>, then restart the server. The README walks through creating the Google OAuth client in Testing mode.
+        <code>GEMINI_API_KEY</code> / <code>GEMINI_MODEL</code>, then restart the server. The README walks through creating the Google OAuth client in Testing mode.
       </p>
     </main>
   );

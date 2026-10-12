@@ -11,7 +11,7 @@ import { YouTube } from "./youtube";
 export type Ctx = {
   db: Db;
   limits: QuotaLimits;
-  llm: { client: LlmClient; model: string };
+  llm: { client: LlmClient };
   youtube: (userId: string, purpose: string, interactive?: boolean) => YouTube;
   now: () => number;
 };
@@ -27,7 +27,7 @@ export function ctx(): Ctx {
   cached = {
     db: database,
     limits,
-    llm: { client: makeClient({ apiKey: e.ANTHROPIC_API_KEY, model: e.ANTHROPIC_MODEL }), model: e.ANTHROPIC_MODEL },
+    llm: { client: makeClient({ apiKey: e.GEMINI_API_KEY, model: e.GEMINI_MODEL }) },
     youtube: (userId, purpose, interactive = false) =>
       new YouTube({
         db: database,

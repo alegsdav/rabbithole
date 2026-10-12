@@ -192,7 +192,7 @@ describe("router", () => {
     const c = testCtx(db, { fetch: fakeYouTubeFetch({ uploads: {} }).fetch, llm });
     const d = await routeSearch(c, userId, "dialing in a new grinder");
     expect(d).toMatchObject({ kind: "assign", laneId, autoRouted: true });
-    const sent = JSON.parse((llm.requests[0] as { messages: { content: string }[] }).messages[0]!.content);
+    const sent = JSON.parse(llm.requests[0]!.user);
     expect(Object.keys(sent).sort()).toEqual(["lanes", "pastCorrections", "query"]);
     expect(Object.keys(sent.lanes[0]).sort()).toEqual(["description", "id", "name"]);
 
@@ -201,7 +201,7 @@ describe("router", () => {
   });
 
   it("clamps confidence", async () => {
-    const out = await routeQuery(scriptedLlm({ action: "assign", laneId: "l1", newLane: null, confidence: 7, alternates: [] }), "m", {
+    const out = await routeQuery(scriptedLlm({ action: "assign", laneId: "l1", newLane: null, confidence: 7, alternates: [] }), {
       query: "q",
       lanes: [],
       corrections: [],
@@ -220,18 +220,15 @@ describe("setup", () => {
     ];
     const fake = fakeYouTubeFetch({ uploads: {}, subscriptions: subs });
     // The classifier answers with ids it can only know from the request, so script it lazily.
-    const requests: { messages: { content: string }[] }[] = [];
+    const requests: { user: string }[] = [];
     const llm = {
-      parse: (async (params: { messages: { content: string }[] }) => {
-        requests.push(params);
-        if (requests.length === 1) return { stop_reason: "end_turn", parsed_output: { lanes: [{ name: "Coffee", description: "Espresso" }, { name: "Software", description: "Architecture" }] } };
-        const body = JSON.parse(params.messages[0]!.content) as { lanes: { id: string; name: string }[] };
+      generateJson: async ({ user }: { user: string }) => {
+        requests.push({ user });
+        if (requests.length === 1) return { lanes: [{ name: "Coffee", description: "Espresso" }, { name: "Software", description: "Architecture" }] };
+        const body = JSON.parse(user) as { lanes: { id: string; name: string }[] };
         const id = (name: string) => body.lanes.find((l) => l.name === name)!.id;
-        return {
-          stop_reason: "end_turn",
-          parsed_output: { assignments: [{ channelId: subs[0]!.channelId, laneId: id("Coffee") }, { channelId: subs[1]!.channelId, laneId: id("Software") }] },
-        };
-      }) as never,
+        return { assignments: [{ channelId: subs[0]!.channelId, laneId: id("Coffee") }, { channelId: subs[1]!.channelId, laneId: id("Software") }] };
+      },
     };
     const report = await setupLanes(testCtx(db, { fetch: fake.fetch, llm }), userId);
     expect(report).toMatchObject({ createdLanes: 2, classified: 2, assigned: 2 });
@@ -240,7 +237,7 @@ describe("setup", () => {
       ["Software", 1],
     ]);
     // Classification sees channel titles/descriptions only.
-    expect(requests[1]!.messages[0]!.content).not.toMatch(/token|email/i);
+    expect(requests[1]!.user).not.toMatch(/token|email/i);
   });
 });
 

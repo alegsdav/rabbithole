@@ -260,7 +260,7 @@ function FirstRun({ onDone }: { onDone: (lanes: LaneSummary[]) => void }) {
     <div className="mx-auto mt-12 max-w-xl px-4 text-center">
       <h1 className="text-2xl font-bold">Build your lanes</h1>
       <p className="mt-2 text-muted">
-        Rabbithole reads your YouTube subscriptions (read-only), groups them into interests with Claude, and gives each interest its own lane. You can correct any channel afterwards.
+        Rabbithole reads your YouTube subscriptions (read-only), groups them into interests with Gemini, and gives each interest its own lane. You can correct any channel afterwards.
       </p>
       <button
         type="button"

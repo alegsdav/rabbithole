@@ -1,6 +1,6 @@
 /**
  * DO FIRST: routing on ~20 sample queries against a fixed set of lanes.
- * Run: npm run eval:routing   (needs ANTHROPIC_API_KEY in .env.local)
+ * Run: npm run eval:routing   (needs GEMINI_API_KEY and GEMINI_MODEL in .env.local)
  *
  * Each case names the lane it should land in, or "create" when no lane fits.
  * Prints each decision, accuracy, how many would auto-route (>= 0.7) and latency.
@@ -41,8 +41,7 @@ const cases: { query: string; expect: string }[] = [
 ];
 
 async function main() {
-  const model = process.env.ANTHROPIC_MODEL ?? "claude-opus-5-5";
-  const client = makeClient({ apiKey: process.env.ANTHROPIC_API_KEY, model });
+  const client = makeClient({ apiKey: process.env.GEMINI_API_KEY, model: process.env.GEMINI_MODEL });
   let correct = 0;
   let auto = 0;
   const latencies: number[] = [];
@@ -51,7 +50,7 @@ async function main() {
     let label: string;
     let line: string;
     try {
-      const out = await routeQuery(client, model, { query: c.query, lanes, corrections: [] });
+      const out = await routeQuery(client, { query: c.query, lanes, corrections: [] });
       const d = decide(out, lanes.map((l) => l.id), "#0090ff");
       label = d.kind === "assign" ? d.laneId : d.kind;
       if (d.kind === "assign" && d.autoRouted) auto++;

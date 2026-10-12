@@ -15,7 +15,7 @@ export default async function ChannelsPage() {
       </Link>
       <h1 className="mt-4 text-2xl font-bold">Channels</h1>
       <p className="mt-1 text-sm text-muted">
-        Claude filed each subscription into a lane from its title and description. Change any of them; your choice sticks when subscriptions are re-synced.
+        The AI sorter filed each subscription into a lane from its title and description. Change any of them; your choice sticks when subscriptions are re-synced.
       </p>
       <ChannelsClient channels={listChannels(c.db, userId)} lanes={laneBriefs(c.db, userId)} />
     </main>

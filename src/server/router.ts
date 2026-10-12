@@ -53,7 +53,7 @@ export async function routeSearch(c: Ctx, userId: string, query: string): Promis
   if (hit && c.now() - hit.at < MEMO_MS) return hit.decision;
 
   try {
-    const out = await routeQuery(c.llm.client, c.llm.model, {
+    const out = await routeQuery(c.llm.client, {
       query,
       lanes: lanes.map(({ id, name, description }) => ({ id, name, description })),
       corrections,

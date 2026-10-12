@@ -36,7 +36,7 @@ export function ChannelsClient({ channels: initial, lanes }: { channels: Channel
             )}
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium">{ch.title}</p>
-              <p className="truncate text-xs text-muted">{ch.source === "user" ? "Filed by you" : "Filed by Claude"}</p>
+              <p className="truncate text-xs text-muted">{ch.source === "user" ? "Filed by you" : "Filed automatically"}</p>
             </div>
             <label className="sr-only" htmlFor={`lane-${ch.channelId}`}>
               Lane for {ch.title}

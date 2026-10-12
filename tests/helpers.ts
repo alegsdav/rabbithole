@@ -84,30 +84,29 @@ export function testCtx(db: Db, opts: { fetch: typeof fetch; llm?: LlmClient; no
   return {
     db,
     limits,
-    llm: { client: opts.llm ?? unavailableLlm(), model: "claude-opus-5-5" },
+    llm: { client: opts.llm ?? unavailableLlm() },
     youtube: (userId, purpose, interactive = false) =>
       new YouTube({ db, limits, userId, purpose, interactive, fetch: opts.fetch, getAccessToken: async () => "test-token" }),
     now: opts.now ?? (() => Date.now()),
   };
 }
 
-/** An LLM client whose `parse` answers with the given objects, in order. */
-export function scriptedLlm(...outputs: unknown[]): LlmClient & { requests: unknown[] } {
-  const requests: unknown[] = [];
+/** An LLM client that answers with the given objects, in order, and records each request. */
+export function scriptedLlm(...outputs: unknown[]): LlmClient & { requests: { system: string; user: string }[] } {
+  const requests: { system: string; user: string }[] = [];
   return {
     requests,
-    parse: (async (params: unknown) => {
-      requests.push(params);
-      const parsed_output = outputs.shift();
-      return { stop_reason: "end_turn", parsed_output, content: [] };
-    }) as unknown as LlmClient["parse"],
+    generateJson: async ({ system, user }) => {
+      requests.push({ system, user });
+      return outputs.shift();
+    },
   };
 }
 
 export function unavailableLlm(): LlmClient {
   return {
-    parse: (async () => {
+    generateJson: async () => {
       throw new Error("no llm in tests");
-    }) as unknown as LlmClient["parse"],
+    },
   };
 }

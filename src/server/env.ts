@@ -13,8 +13,9 @@ const schema = z.object({
   TOKEN_ENC_KEY: z
     .string()
     .refine((v) => Buffer.from(v, "base64").length === 32, "TOKEN_ENC_KEY must be 32 bytes, base64"),
-  ANTHROPIC_API_KEY: z.string().optional(),
-  ANTHROPIC_MODEL: z.string().default("claude-opus-5-5"),
+  GEMINI_API_KEY: z.string().optional(),
+  /** Any Gemini model id, e.g. gemini-2.5-flash; swap it without code changes. */
+  GEMINI_MODEL: z.string().optional(),
   DATABASE_PATH: z.string().default("./data/rabbithole.db"),
   /** YouTube Data API daily quota for the Google Cloud project. */
   YT_DAILY_QUOTA: z.coerce.number().int().positive().default(10_000),

@@ -240,14 +240,14 @@ export async function setupLanes(c: Ctx, userId: string) {
   const channels = listChannels(c.db, userId);
   let createdLanes: string[] = [];
   if (laneBriefs(c.db, userId).length === 0 && channels.length > 0) {
-    const proposed = await proposeLanes(c.llm.client, c.llm.model, channels);
+    const proposed = await proposeLanes(c.llm.client, channels);
     createdLanes = proposed.map((p) => createLane(c.db, userId, { name: p.name, description: p.description, createdBy: "setup" }));
   }
   const unassigned = channels.filter((ch) => ch.laneId === null && ch.source === "llm");
   const briefs = laneBriefs(c.db, userId);
   let assigned = 0;
   if (unassigned.length && briefs.length) {
-    const result = await classifyChannels(c.llm.client, c.llm.model, briefs, unassigned);
+    const result = await classifyChannels(c.llm.client, briefs, unassigned);
     c.db.transaction((tx) => {
       for (const [channelId, laneId] of result) {
         if (laneId) assigned++;
@@ -339,7 +339,7 @@ export async function refreshLane(c: Ctx, userId: string, laneId: string, opts: 
     if (queries.length === 0) {
       try {
         const titles = laneItems(c.db, userId, laneId, 0, 15, false).items.map((i) => i.title);
-        queries = await writeLaneQueries(c.llm.client, c.llm.model, lane, titles);
+        queries = await writeLaneQueries(c.llm.client, lane, titles);
         c.db.update(lanes).set({ searchQueries: JSON.stringify(queries) }).where(eq(lanes.id, laneId)).run();
       } catch (err) {
         if (!(err instanceof LlmUnavailableError)) throw err;

@@ -1,10 +1,9 @@
 import "server-only";
-import Anthropic from "@anthropic-ai/sdk";
-import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
+import { GoogleGenAI } from "@google/genai";
 import { z } from "zod";
 
 /**
- * Every call to Claude in the app. Each sends only what its task needs:
+ * Every LLM call in the app. Each sends only what its task needs:
  * routing sends the query plus lane ids, names and descriptions; channel
  * classification sends channel titles and descriptions. Never tokens,
  * cookies, history or account details.
@@ -17,42 +16,42 @@ export class LlmUnavailableError extends Error {
   }
 }
 
-export type LlmConfig = { apiKey?: string; model: string };
+export type LlmConfig = { apiKey?: string; model?: string };
 
-/** The minimal surface used here, so tests can pass a fake. */
-export type LlmClient = Pick<Anthropic["beta"]["messages"], "parse">;
+/** The one operation the app needs: JSON that matches a schema. Tests pass a fake. */
+export type LlmClient = {
+  generateJson: (args: { system: string; user: string; schema: unknown; maxTokens: number }) => Promise<unknown>;
+};
 
+/** Gemini, with the model chosen by GEMINI_MODEL (never hard-coded). */
 export function makeClient(config: LlmConfig): LlmClient {
-  // With no key in the server env the SDK still resolves ANTHROPIC_AUTH_TOKEN or a CLI profile.
-  return new Anthropic(config.apiKey ? { apiKey: config.apiKey } : {}).beta.messages;
+  return {
+    async generateJson({ system, user, schema, maxTokens }) {
+      if (!config.apiKey) throw new LlmUnavailableError("GEMINI_API_KEY is not set");
+      if (!config.model) throw new LlmUnavailableError("GEMINI_MODEL is not set");
+      const ai = new GoogleGenAI({ apiKey: config.apiKey });
+      const res = await ai.models.generateContent({
+        model: config.model,
+        contents: user,
+        config: { systemInstruction: system, responseMimeType: "application/json", responseJsonSchema: schema, maxOutputTokens: maxTokens },
+      });
+      const text = res.text;
+      if (!text) throw new LlmUnavailableError("Gemini returned no output");
+      return JSON.parse(text);
+    },
+  };
 }
 
-async function structured<T extends z.ZodType>(
-  client: LlmClient,
-  model: string,
-  schema: T,
-  system: string,
-  user: string,
-  maxTokens = 2048,
-): Promise<z.infer<T>> {
-  let response;
+async function structured<T extends z.ZodType>(client: LlmClient, schema: T, system: string, user: string, maxTokens = 2048): Promise<z.infer<T>> {
+  let raw: unknown;
   try {
-    response = await client.parse({
-      model,
-      max_tokens: maxTokens,
-      betas: ["server-side-fallback-2026-07-01"],
-      fallbacks: "default",
-      output_config: { effort: "low", format: betaZodOutputFormat(schema) },
-      system,
-      messages: [{ role: "user", content: user }],
-    });
+    raw = await client.generateJson({ system, user, schema: z.toJSONSchema(schema), maxTokens });
   } catch (err) {
-    if (err instanceof Anthropic.APIError) throw new LlmUnavailableError(`Claude API error ${err.status ?? ""}: ${err.message}`);
+    if (err instanceof LlmUnavailableError) throw err;
     throw new LlmUnavailableError(err instanceof Error ? err.message : String(err));
   }
-  if (response.stop_reason === "refusal") throw new LlmUnavailableError("Claude declined this request");
-  const checked = schema.safeParse(response.parsed_output);
-  if (!checked.success) throw new LlmUnavailableError("Claude returned output that failed validation");
+  const checked = schema.safeParse(raw);
+  if (!checked.success) throw new LlmUnavailableError("The model returned output that failed validation");
   return checked.data;
 }
 
@@ -80,13 +79,12 @@ Prefer existing lanes: a lane covers its whole topic area, including adjacent su
 
 export async function routeQuery(
   client: LlmClient,
-  model: string,
   input: { query: string; lanes: LaneBrief[]; corrections: Correction[] },
 ): Promise<RouterOutput> {
   const lanes = input.lanes.map((l) => ({ id: l.id, name: l.name, description: l.description }));
   const corrections = input.corrections.slice(0, 20).map((c) => ({ query: c.query, laneId: c.laneId }));
   const user = JSON.stringify({ lanes, pastCorrections: corrections, query: input.query });
-  const out = await structured(client, model, routerOutput, ROUTER_SYSTEM, user, 1024);
+  const out = await structured(client, routerOutput, ROUTER_SYSTEM, user, 1024);
   return { ...out, confidence: Math.min(1, Math.max(0, out.confidence)) };
 }
 
@@ -98,10 +96,10 @@ const proposeOutput = z.object({
   lanes: z.array(z.object({ name: z.string(), description: z.string() })),
 });
 
-export async function proposeLanes(client: LlmClient, model: string, channels: ChannelBrief[]): Promise<{ name: string; description: string }[]> {
+export async function proposeLanes(client: LlmClient, channels: ChannelBrief[]): Promise<{ name: string; description: string }[]> {
   const brief = channels.map((c) => `${c.title}: ${c.description.replace(/\s+/g, " ").slice(0, 120)}`).join("\n");
   const system = `You group a person's YouTube subscriptions into interest lanes for a home screen that shows each interest separately. Propose 4 to 10 lanes that together cover most channels. Each lane: a short name (1-3 words, Title Case) and a one-sentence description of the interest it covers. Make lanes distinct; merge small niches into a broader lane rather than creating one-channel lanes.`;
-  const out = await structured(client, model, proposeOutput, system, `Subscriptions (title: description):\n${brief}`, 2048);
+  const out = await structured(client, proposeOutput, system, `Subscriptions (title: description):\n${brief}`, 2048);
   return out.lanes.slice(0, 10);
 }
 
@@ -112,7 +110,6 @@ const classifyOutput = z.object({
 /** Assigns channels to lanes in batches; channels it cannot place stay unassigned (null). */
 export async function classifyChannels(
   client: LlmClient,
-  model: string,
   lanes: LaneBrief[],
   channels: ChannelBrief[],
   batchSize = 60,
@@ -126,7 +123,7 @@ export async function classifyChannels(
       lanes: lanes.map((l) => ({ id: l.id, name: l.name, description: l.description })),
       channels: batch.map((c) => ({ channelId: c.channelId, title: c.title, description: c.description.replace(/\s+/g, " ").slice(0, 200) })),
     });
-    const out = await structured(client, model, classifyOutput, system, user, 4096);
+    const out = await structured(client, classifyOutput, system, user, 4096);
     for (const a of out.assignments) {
       if (batch.some((c) => c.channelId === a.channelId)) result.set(a.channelId, a.laneId && laneIds.has(a.laneId) ? a.laneId : null);
     }
@@ -137,9 +134,9 @@ export async function classifyChannels(
 const queriesOutput = z.object({ queries: z.array(z.string()) });
 
 /** A few YouTube search queries that find fresh videos for a lane beyond its subscriptions. */
-export async function writeLaneQueries(client: LlmClient, model: string, lane: LaneBrief, sampleTitles: string[], count = 2): Promise<string[]> {
+export async function writeLaneQueries(client: LlmClient, lane: LaneBrief, sampleTitles: string[], count = 2): Promise<string[]> {
   const system = `You write YouTube search queries that surface good recent videos for one interest. Write ${count} distinct, specific queries (2-6 words each) a person deep into this interest would search. No quotes or operators.`;
   const user = JSON.stringify({ lane: { name: lane.name, description: lane.description }, recentVideoTitles: sampleTitles.slice(0, 15) });
-  const out = await structured(client, model, queriesOutput, system, user, 512);
+  const out = await structured(client, queriesOutput, system, user, 512);
   return out.queries.map((q) => q.trim()).filter(Boolean).slice(0, count);
 }
