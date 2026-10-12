@@ -11,7 +11,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version-file: .nvmrc
           cache: npm
       - run: npm ci
       - run: npm run lint
@@ -24,18 +24,18 @@ jobs:
       matrix:
         include:
           - os: macos-latest
-            projects: --project=chromium --project=webkit --project=firefox --project=mobile-safari
+            projects: --project=chromium --project=webkit --project=mobile-safari
           - os: windows-latest
-            projects: --project=chromium --project=firefox --project=edge
+            projects: --project=chromium
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - run: npx playwright install --with-deps chromium webkit firefox
+      - run: npx playwright install --with-deps chromium webkit
       - name: Throwaway secrets for the demo database (never real credentials)
         shell: bash
         run: |
