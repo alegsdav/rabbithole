@@ -27,7 +27,7 @@ export function ctx(): Ctx {
   cached = {
     db: database,
     limits,
-    llm: { client: makeClient({ apiKey: e.GEMINI_API_KEY, model: e.GEMINI_MODEL }) },
+    llm: { client: makeClient({ apiKey: e.GEMINI_API_KEY, model: e.GEMINI_MODEL, rpm: e.GEMINI_RPM }) },
     youtube: (userId, purpose, interactive = false) =>
       new YouTube({
         db: database,

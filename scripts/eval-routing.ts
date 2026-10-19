@@ -4,6 +4,7 @@
  *
  * Each case names the lane it should land in, or "create" when no lane fits.
  * Prints each decision, accuracy, how many would auto-route (>= 0.7) and latency.
+ * API errors are counted apart from misroutes. On the free tier set GEMINI_RPM=5 so calls are paced.
  */
 import { decide } from "../src/server/router";
 import { makeClient, routeQuery, type LaneBrief } from "../src/server/llm";
@@ -41,12 +42,18 @@ const cases: { query: string; expect: string }[] = [
 ];
 
 async function main() {
+  // Pace in the script rather than in the client, so the latency below is the call alone.
+  const gapMs = process.env.GEMINI_RPM ? 60_000 / Number(process.env.GEMINI_RPM) : 0;
   const client = makeClient({ apiKey: process.env.GEMINI_API_KEY, model: process.env.GEMINI_MODEL });
   let correct = 0;
   let auto = 0;
+  let errors = 0;
+  let lastStart = -Infinity;
   const latencies: number[] = [];
   for (const c of cases) {
-    const t0 = performance.now();
+    const due = lastStart + gapMs - performance.now();
+    if (due > 0) await new Promise((resolve) => setTimeout(resolve, due));
+    const t0 = (lastStart = performance.now());
     let label: string;
     let line: string;
     try {
@@ -58,16 +65,21 @@ async function main() {
       line += ` conf=${out.confidence.toFixed(2)}`;
     } catch (err) {
       label = "error";
+      errors++;
       line = `error: ${err instanceof Error ? err.message : String(err)}`;
     }
     const ms = performance.now() - t0;
-    latencies.push(ms);
+    if (label !== "error") latencies.push(ms);
     const ok = label === c.expect;
     if (ok) correct++;
-    console.log(`${ok ? "PASS" : "MISS"}  ${c.query.padEnd(40)} -> ${line}  (${Math.round(ms)} ms, expected ${c.expect})`);
+    console.log(`${ok ? "PASS" : label === "error" ? "ERR " : "MISS"}  ${c.query.padEnd(40)} -> ${line}  (${Math.round(ms)} ms, expected ${c.expect})`);
   }
   latencies.sort((a, b) => a - b);
-  console.log(`\nAccuracy: ${correct}/${cases.length}   auto-routed: ${auto}   median latency: ${Math.round(latencies[Math.floor(latencies.length / 2)]!)} ms`);
+  const pct = (p: number) => (latencies.length ? `${Math.round(latencies[Math.min(latencies.length - 1, Math.floor(latencies.length * p))]!)} ms` : "n/a");
+  const answered = cases.length - errors;
+  console.log(
+    `\nAccuracy: ${correct}/${cases.length} overall, ${correct}/${answered} of answered   API errors: ${errors}   auto-routed: ${auto}   latency p50 ${pct(0.5)}, p90 ${pct(0.9)}`,
+  );
   process.exitCode = correct / cases.length >= 0.85 ? 0 : 1;
 }
 

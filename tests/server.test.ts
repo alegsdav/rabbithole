@@ -5,7 +5,7 @@ import { decrypt, encrypt } from "@/server/crypto";
 import { feedItems, lanes as lanesTable, quotaLog, signals, users } from "@/server/db/schema";
 import { checkCsrf, rateLimit } from "@/server/guards";
 import { createLane, deleteLane, laneItems, listLanes, recordSignal, refreshLane, searchInLane, setupLanes } from "@/server/lanes";
-import { routeQuery } from "@/server/llm";
+import { LlmUnavailableError, rateLimiter, routeQuery } from "@/server/llm";
 import { QuotaError, quotaDay, reserveUnits, usedToday } from "@/server/quota";
 import { isShort, rankLanes, scoreVideo, type Candidate, type RankContext } from "@/server/ranker";
 import { decide, routeSearch } from "@/server/router";
@@ -334,5 +334,29 @@ describe("http guards", () => {
     expect(csp).toContain("frame-src https://www.youtube.com https://www.youtube-nocookie.com;");
     expect(csp).toContain("script-src 'self' 'nonce-abc' 'strict-dynamic'");
     expect(csp).not.toContain("unsafe-eval");
+  });
+});
+
+describe("rateLimiter", () => {
+  it("lets rpm calls through per minute, then waits for the oldest to age out", async () => {
+    let t = 0;
+    const waits: number[] = [];
+    const acquire = rateLimiter(2, () => t, async (ms) => {
+      waits.push(ms);
+      t += ms;
+    });
+    await acquire();
+    t += 1_000;
+    await acquire();
+    await acquire();
+    expect(waits).toEqual([59_000]);
+  });
+
+  it("fails fast when the wait would exceed maxWaitMs, and never limits without rpm", async () => {
+    const acquire = rateLimiter(1, () => 0, async () => {});
+    await acquire(0);
+    await expect(acquire(3_000)).rejects.toBeInstanceOf(LlmUnavailableError);
+    const unlimited = rateLimiter(undefined);
+    for (let i = 0; i < 100; i++) await unlimited(0);
   });
 });

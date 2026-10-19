@@ -16,6 +16,8 @@ const schema = z.object({
   GEMINI_API_KEY: z.string().optional(),
   /** Any Gemini model id, e.g. gemini-2.5-flash; swap it without code changes. */
   GEMINI_MODEL: z.string().optional(),
+  /** Requests per minute to stay under, e.g. 5 on the free tier; unset means no client-side limit. */
+  GEMINI_RPM: z.coerce.number().int().positive().optional(),
   DATABASE_PATH: z.string().default("./data/rabbithole.db"),
   /** YouTube Data API daily quota for the Google Cloud project. */
   YT_DAILY_QUOTA: z.coerce.number().int().positive().default(10_000),

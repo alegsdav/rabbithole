@@ -1,5 +1,5 @@
 import "server-only";
-import { GoogleGenAI } from "@google/genai";
+import { ApiError, GoogleGenAI } from "@google/genai";
 import { z } from "zod";
 
 /**
@@ -16,40 +16,88 @@ export class LlmUnavailableError extends Error {
   }
 }
 
-export type LlmConfig = { apiKey?: string; model?: string };
+/** rpm: requests per minute to stay under (GEMINI_RPM); unset means no client-side limit. */
+export type LlmConfig = { apiKey?: string; model?: string; rpm?: number };
 
-/** The one operation the app needs: JSON that matches a schema. Tests pass a fake. */
+/**
+ * The one operation the app needs: JSON that matches a schema. Tests pass a fake.
+ * maxWaitMs caps how long a call may queue for a rate-limit slot before giving up.
+ */
 export type LlmClient = {
-  generateJson: (args: { system: string; user: string; schema: unknown; maxTokens: number }) => Promise<unknown>;
+  generateJson: (args: { system: string; user: string; schema: unknown; maxTokens: number; maxWaitMs?: number }) => Promise<unknown>;
 };
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Sliding one-minute window: waits for a free slot, or throws if that would take longer than maxWaitMs. */
+export function rateLimiter(rpm: number | undefined, now: () => number = Date.now, wait: (ms: number) => Promise<unknown> = sleep) {
+  const sent: number[] = [];
+  return async function acquire(maxWaitMs = Infinity): Promise<void> {
+    if (!rpm) return;
+    for (;;) {
+      const t = now();
+      while (sent.length && t - sent[0]! >= 60_000) sent.shift();
+      if (sent.length < rpm) {
+        sent.push(t);
+        return;
+      }
+      const delay = sent[0]! + 60_000 - t;
+      if (delay > maxWaitMs) throw new LlmUnavailableError(`Gemini rate limit (${rpm}/min) reached; try again in ${Math.ceil(delay / 1000)}s`);
+      await wait(delay);
+    }
+  };
+}
 
 /** Gemini, with the model chosen by GEMINI_MODEL (never hard-coded). */
 export function makeClient(config: LlmConfig): LlmClient {
+  const acquire = rateLimiter(config.rpm);
   return {
-    async generateJson({ system, user, schema, maxTokens }) {
+    async generateJson({ system, user, schema, maxTokens, maxWaitMs }) {
       if (!config.apiKey) throw new LlmUnavailableError("GEMINI_API_KEY is not set");
       if (!config.model) throw new LlmUnavailableError("GEMINI_MODEL is not set");
-      // Bounded retries: Gemini returns 503 under load; a search should wait seconds, not minutes.
+      await acquire(maxWaitMs);
+      // Bounded retries on 500/503 (Gemini under load). Not 429: a quick retry can't clear a
+      // per-minute window and spends another request against it.
       const ai = new GoogleGenAI({
         apiKey: config.apiKey,
-        httpOptions: { timeout: 20_000, retryOptions: { attempts: 3, initialDelay: 1, maxDelay: 4, httpStatusCodes: [429, 500, 503] } },
+        httpOptions: { timeout: 20_000, retryOptions: { attempts: 3, initialDelay: 1, maxDelay: 4, httpStatusCodes: [500, 503] } },
       });
-      const res = await ai.models.generateContent({
-        model: config.model,
-        contents: user,
-        config: { systemInstruction: system, responseMimeType: "application/json", responseJsonSchema: schema, maxOutputTokens: maxTokens },
-      });
-      const text = res.text;
-      if (!text) throw new LlmUnavailableError("Gemini returned no output");
-      return JSON.parse(text);
+      try {
+        const res = await ai.models.generateContent({
+          model: config.model,
+          contents: user,
+          config: { systemInstruction: system, responseMimeType: "application/json", responseJsonSchema: schema, maxOutputTokens: maxTokens },
+        });
+        const text = res.text;
+        if (!text) throw new LlmUnavailableError("Gemini returned no output");
+        return JSON.parse(text);
+      } catch (err) {
+        if (err instanceof ApiError) throw new LlmUnavailableError(describeApiError(err));
+        throw err;
+      }
     },
   };
 }
 
-async function structured<T extends z.ZodType>(client: LlmClient, schema: T, system: string, user: string, maxTokens = 2048): Promise<z.infer<T>> {
+/** One readable line instead of the raw JSON error body. */
+function describeApiError(err: ApiError): string {
+  if (err.status === 429) return "Gemini rate limit or quota exceeded (429); set GEMINI_RPM to stay under it";
+  if (err.status === 503) return "Gemini is overloaded (503); try again shortly";
+  if (err.status === 504) return "Gemini timed out (504)";
+  return `Gemini error ${err.status}`;
+}
+
+async function structured<T extends z.ZodType>(
+  client: LlmClient,
+  schema: T,
+  system: string,
+  user: string,
+  maxTokens = 2048,
+  maxWaitMs?: number,
+): Promise<z.infer<T>> {
   let raw: unknown;
   try {
-    raw = await client.generateJson({ system, user, schema: z.toJSONSchema(schema), maxTokens });
+    raw = await client.generateJson({ system, user, schema: z.toJSONSchema(schema), maxTokens, maxWaitMs });
   } catch (err) {
     if (err instanceof LlmUnavailableError) throw err;
     throw new LlmUnavailableError(err instanceof Error ? err.message : String(err));
@@ -81,14 +129,16 @@ Return one decision:
 
 Prefer existing lanes: a lane covers its whole topic area, including adjacent sub-topics, so only propose a new lane when the query is clearly outside every lane. confidence is your probability (0 to 1) that the decision is the one the user wants. alternates lists up to two other plausible lane ids, best first, never the chosen one. Use only lane ids that appear in the list. Past corrections from this user show where they want similar queries filed; follow them.`;
 
+/** maxWaitMs: a search falls back to the lane picker rather than queue long for a rate-limit slot. */
 export async function routeQuery(
   client: LlmClient,
   input: { query: string; lanes: LaneBrief[]; corrections: Correction[] },
+  maxWaitMs = 3_000,
 ): Promise<RouterOutput> {
   const lanes = input.lanes.map((l) => ({ id: l.id, name: l.name, description: l.description }));
   const corrections = input.corrections.slice(0, 20).map((c) => ({ query: c.query, laneId: c.laneId }));
   const user = JSON.stringify({ lanes, pastCorrections: corrections, query: input.query });
-  const out = await structured(client, routerOutput, ROUTER_SYSTEM, user, 1024);
+  const out = await structured(client, routerOutput, ROUTER_SYSTEM, user, 1024, maxWaitMs);
   return { ...out, confidence: Math.min(1, Math.max(0, out.confidence)) };
 }
 
