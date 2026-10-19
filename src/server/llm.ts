@@ -29,7 +29,11 @@ export function makeClient(config: LlmConfig): LlmClient {
     async generateJson({ system, user, schema, maxTokens }) {
       if (!config.apiKey) throw new LlmUnavailableError("GEMINI_API_KEY is not set");
       if (!config.model) throw new LlmUnavailableError("GEMINI_MODEL is not set");
-      const ai = new GoogleGenAI({ apiKey: config.apiKey });
+      // Bounded retries: Gemini returns 503 under load; a search should wait seconds, not minutes.
+      const ai = new GoogleGenAI({
+        apiKey: config.apiKey,
+        httpOptions: { timeout: 20_000, retryOptions: { attempts: 3, initialDelay: 1, maxDelay: 4, httpStatusCodes: [429, 500, 503] } },
+      });
       const res = await ai.models.generateContent({
         model: config.model,
         contents: user,
